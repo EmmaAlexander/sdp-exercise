@@ -20,17 +20,17 @@ def handle_processing(obs: Observation) -> None:
 
 	while True:
 		image_prefix = DATA_DIR / f"{obs.obs_id}_image"
-		run_processing(DATA_DIR, obs.visibilty_path, image_prefix)
+		run_processing(DATA_DIR, obs.visibility_path, image_prefix)
 		obs.image_path = image_prefix 
-		obs.transition(ObservationState.AWAITING_REVIEW)
+		obs.transition_state(ObservationState.AWAITING_REVIEW)
 
 		decision = human_review(obs)
 		if decision == "continue":
-			obs.visibilty_path.unlink(missing_ok=True)
-			obs.transition(ObservationState.DONE)
+			obs.visibility_path.unlink(missing_ok=True)
+			obs.transition_state(ObservationState.DONE)
 			break
 		else:
-			obs.transition(ObservationState.PROCESSING)
+			obs.transition_state(ObservationState.PROCESSING)
 
 def main() -> None:
 	"""Continually observe while storage allows and process each data set in parallel"""
@@ -44,14 +44,14 @@ def main() -> None:
 				break
 
 			obs = Observation()
-			obs.transition(ObservationState.OBSERVING)
+			obs.transition_state(ObservationState.OBSERVING)
 			vis_path = DATA_DIR / f"{obs.obs_id}.ms"
 			run_observation(DATA_DIR, vis_path)
-			obs.visibilty_path = visibilty_path
-			obs.transition(ObservationState.PROCESSING)
+			obs.visibility_path = vis_path
+			obs.transition_state(ObservationState.PROCESSING)
 
 			executor.submit(handle_processing, obs)
 
 if __name__ == "__main__":
-	logging.basicConfic(level=logging.INFO)
+	logging.basicConfig(level=logging.INFO)
 	main()

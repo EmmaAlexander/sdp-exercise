@@ -14,9 +14,9 @@ from sdp_control.data_review import human_review
 
 log = logging.getLogger(__name__)
 
-DATA_DIR = Path("data")
+DATA_DIR = Path("data").resolve()
 STORAGE_THRESHOLD_BYTES = 5 * 1024**3 # 5GB
-MAX_CONCURRENT_PROCESSING = 3
+MAX_CONCURRENT_PROCESSING = 1
 
 review_queue: queue.Queue = queue.Queue()
 
@@ -92,19 +92,19 @@ def main() -> None:
 		_mark_pending()
 		executor.submit(process_and_queue, obs, executor)
 
-		_observing_finished.set()
-		if _pending_count==0:
-			_campaign_complete.set()
+	_observing_finished.set()
+	if _pending_count==0:
+		_campaign_complete.set()
 
-		log.info("Waiting for remaining processing and review to finish")
+	log.info("Waiting for remaining processing and review to finish")
 
-		_campaign_complete.wait()
+	_campaign_complete.wait()
 
-		executor.shutdown(wait=True)
-		review_queue.put(None)
-		reviewer_thread.join()
+	executor.shutdown(wait=True)
+	review_queue.put(None)
+	reviewer_thread.join()
 
-		log.info("Everything complete")
+	log.info("Everything complete")
 
 
 

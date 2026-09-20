@@ -12,8 +12,6 @@ import pytest
 def test_storage_available(current_size_bytes, threshold_bytes, expected):
 	assert storage_available(current_size_bytes, threshold_bytes) is expected
 
-
-
 def test_get_directory_size(tmp_path):
 	(tmp_path / "a.txt").write_bytes(b"1234")
 	(tmp_path / "b.txt").write_bytes(b"12345678")

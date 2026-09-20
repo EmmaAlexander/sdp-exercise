@@ -1,13 +1,18 @@
 """Tests for storage.py"""
 
 from sdp_control.storage import get_directory_size, storage_available
+import pytest
 
-def test_storage_available():
-	assert storage_available(current_size_bytes=100, threshold_bytes=200) is True
+@pytest.mark.parametrize("current_size_bytes,threshold_bytes,expected", [
+    (100, 200, True),   # under threshold
+    (200, 200, False),  # exactly at threshold
+    (250, 200, False),  # over threshold
+])
 
-def test_storage_not_available():
-	assert storage_available(current_size_bytes=200, threshold_bytes=200) is False
-	assert storage_available(current_size_bytes=300, threshold_bytes=200) is False
+def test_storage_available(current_size_bytes, threshold_bytes, expected):
+	assert storage_available(current_size_bytes, threshold_bytes) is expected
+
+
 
 def test_get_directory_size(tmp_path):
 	(tmp_path / "a.txt").write_bytes(b"1234")

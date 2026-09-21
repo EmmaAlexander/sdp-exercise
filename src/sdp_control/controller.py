@@ -46,6 +46,10 @@ class CampaignState:
 
 def process_and_queue(obs: Observation, state: CampaignState) -> None:
     """Process an observation, then queue it for human review."""
+    if obs.visibility_path is None:
+        raise ValueError(
+            f"Observation {obs.obs_id} has no visibility data to process"
+        )
     image_prefix = DATA_DIR / f"{obs.obs_id}_image"
     run_processing(DATA_DIR, obs.visibility_path, image_prefix)
     obs.image_path = image_prefix

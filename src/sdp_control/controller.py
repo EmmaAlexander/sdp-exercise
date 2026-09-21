@@ -62,6 +62,7 @@ def submit_processing(obs: Observation, executor: ThreadPoolExecutor, state: Cam
             future.result()
         except Exception:
             log.exception(f"Processing failed for observation {obs.obs_id}")
+            obs.transition_state(ObservationState.FAILED)
             state.mark_complete(obs)
 
     future = executor.submit(process_and_queue, obs, state)

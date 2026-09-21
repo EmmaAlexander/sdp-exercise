@@ -41,7 +41,7 @@ def test_submit_calls_executor():
     executor.submit.assert_called_once_with(controller.process_and_queue, obs, state)
 
 
-def test_submit_marks_complete_on_failure():
+def test_submit_marks_failed_on_processing_failure():
     obs = make_observation()
     state = controller.CampaignState()
     state.mark_pending(obs)
@@ -50,10 +50,12 @@ def test_submit_marks_complete_on_failure():
     executor.submit.return_value = future
 
     controller.submit_processing(obs, executor, state)
+
     on_done = future.add_done_callback.call_args[0][0]
     future.result.side_effect = RuntimeError("docker exploded")
     on_done(future)
 
+    assert obs.state == ObservationState.FAILED
     assert obs.obs_id not in state.pending
 
 

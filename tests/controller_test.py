@@ -151,6 +151,7 @@ def test_shutdown_completes_when_nothing_pending(mocker):
     reviewer_thread.join.assert_called_once()
     assert state.review_queue.get_nowait() is None
 
+
 def test_review_failure_marks_observation_failed(mocker):
     obs = make_observation(
         image_path=Path("data/abc123_image"),
@@ -172,6 +173,7 @@ def test_review_failure_marks_observation_failed(mocker):
 
     assert obs.state == ObservationState.FAILED
     assert obs.obs_id not in state.pending
+
 
 def test_review_cleanup_failure_marks_observation_failed(mocker):
     obs = make_observation(
@@ -205,7 +207,6 @@ def test_review_cleanup_failure_marks_observation_failed(mocker):
     assert obs.obs_id not in state.pending
 
 
-
 def test_main_stops_when_storage_threshold_reached(mocker):
     mocker.patch(
         "sdp_control.controller.get_directory_size",
@@ -235,6 +236,7 @@ def test_main_stops_when_storage_threshold_reached(mocker):
     mock_reviewer_thread.start.assert_called_once()
     mock_reviewer_thread.join.assert_called_once()
 
+
 def test_main_continues_after_observation_failure(mocker):
     mocker.patch("sdp_control.controller.get_directory_size", return_value=0)
     mocker.patch(
@@ -249,6 +251,7 @@ def test_main_continues_after_observation_failure(mocker):
     mocker.patch("sdp_control.controller.threading.Thread")
 
     controller.main()  # should not raise
+
 
 def test_campaign_complete_when_pending_empty_and_observing_finished(mocker):
     coordinator = controller.CampaignCoordinator()

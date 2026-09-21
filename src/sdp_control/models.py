@@ -2,7 +2,6 @@
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
 from uuid import uuid4
@@ -19,6 +18,7 @@ class ObservationState(Enum):
     AWAITING_REVIEW = auto()
     DONE = auto()
     FAILED = auto()
+
 
 VALID_TRANSITIONS = {
     ObservationState.PENDING: {
@@ -54,10 +54,7 @@ class Observation:
     def transition_state(self, new_state: ObservationState) -> None:
         """Move the observation to a valid next state."""
         if new_state not in VALID_TRANSITIONS[self.state]:
-            raise ValueError(
-                f"Invalid state transition: "
-                f"{self.state.name} -> {new_state.name}"
-            )
+            raise ValueError(f"Invalid state transition: {self.state.name} -> {new_state.name}")
 
         log.info(
             "Observation %s: %s -> %s",

@@ -13,21 +13,24 @@ def make_observation() -> Observation:
     return Observation(image_path=Path("data/abc123_image"))
 
 
-@pytest.mark.parametrize("user_input,expected", [
-    ("continue", "continue"),
-    ("reprocess", "reprocess"),
-    ("c", "continue"),
-    ("r", "reprocess"),
-    ("Continue", "continue"),
-    ("REPROCESS", "reprocess"),
-])
-
+@pytest.mark.parametrize(
+    "user_input,expected",
+    [
+        ("continue", "continue"),
+        ("reprocess", "reprocess"),
+        ("c", "continue"),
+        ("r", "reprocess"),
+        ("Continue", "continue"),
+        ("REPROCESS", "reprocess"),
+    ],
+)
 def test_human_review_accepts_valid_input(user_input, expected, mocker):
     obs = make_observation()
 
     mocker.patch("builtins.input", return_value=user_input)
 
     assert human_review(obs) == expected
+
 
 def test_human_review_reprompts_on_invalid_input_then_accepts(mocker):
     obs = make_observation()

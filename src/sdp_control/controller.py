@@ -8,14 +8,12 @@ import shutil
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from pathlib import Path
 
+from sdp_control.config import DATA_DIR, MAX_CONCURRENT_PROCESSING, STORAGE_THRESHOLD_BYTES
 from sdp_control.data_review import human_review
 from sdp_control.models import Observation, ObservationState
 from sdp_control.runner import run_observation, run_processing
 from sdp_control.storage import get_directory_size, storage_available
-
-from sdp_control.config import DATA_DIR, MAX_CONCURRENT_PROCESSING, STORAGE_THRESHOLD_BYTES
 
 log = logging.getLogger(__name__)
 status = logging.getLogger("status")
@@ -47,9 +45,7 @@ class CampaignCoordinator:
 def process_and_queue(obs: Observation, state: CampaignCoordinator) -> None:
     """Process an observation, then queue it for human review."""
     if obs.visibility_path is None:
-        raise ValueError(
-            f"Observation {obs.obs_id} has no visibility data to process"
-        )
+        raise ValueError(f"Observation {obs.obs_id} has no visibility data to process")
     image_prefix = DATA_DIR / f"{obs.obs_id}_image"
     run_processing(DATA_DIR, obs.visibility_path, image_prefix)
     obs.image_path = image_prefix
@@ -58,7 +54,9 @@ def process_and_queue(obs: Observation, state: CampaignCoordinator) -> None:
     status.info(f"Observation {obs.obs_id[:8]} ready for review")
 
 
-def submit_processing(obs: Observation, executor: ThreadPoolExecutor, state: CampaignCoordinator) -> None:
+def submit_processing(
+    obs: Observation, executor: ThreadPoolExecutor, state: CampaignCoordinator
+) -> None:
     """Submit an observation to the processing pool, handling failures via callback."""
 
     def on_done(future: Future[None]) -> None:
@@ -90,10 +88,7 @@ def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignCoordinator) -> N
 
                 obs.transition_state(ObservationState.DONE)
                 state.mark_complete(obs)
-                status.info(
-                    f"Observation {obs.obs_id[:8]} accepted, "
-                    "visibility data removed"
-                )
+                status.info(f"Observation {obs.obs_id[:8]} accepted, visibility data removed")
             else:  # "reprocess"
                 obs.transition_state(ObservationState.PROCESSING)
                 submit_processing(obs, executor, state)
@@ -107,8 +102,9 @@ def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignCoordinator) -> N
             state.mark_complete(obs)
 
 
-
-def shutdown(executor: ThreadPoolExecutor, reviewer_thread: threading.Thread, state: CampaignCoordinator) -> None:
+def shutdown(
+    executor: ThreadPoolExecutor, reviewer_thread: threading.Thread, state: CampaignCoordinator
+) -> None:
     """Signal that observing has finished, and wait for everything else to drain."""
     state.observing_finished.set()
 
@@ -170,7 +166,6 @@ def main() -> None:
             state.mark_pending(obs)
             submit_processing(obs, executor, state)
             observations_started += 1
-
 
     finally:
         shutdown(executor, reviewer_thread, state)

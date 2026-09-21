@@ -42,7 +42,8 @@ def _run_docker_script(
 def run_observation(data_dir: Path, output_path: Path) -> None:
     """Generate mock visibility data from an observation with Docker."""
     _run_docker_script(
-        data_dir, "/scripts/generate_visibilities.sh",
+        data_dir,
+        "/scripts/generate_visibilities.sh",
         f"/data/{output_path.name}",
         action="Starting observation",
     )
@@ -51,7 +52,9 @@ def run_observation(data_dir: Path, output_path: Path) -> None:
 def run_processing(data_dir: Path, visibilities_path: Path, output_prefix: Path) -> None:
     """Image visibility data with Docker."""
     _run_docker_script(
-        data_dir, "/scripts/process_visibilities.sh",
-        f"/data/{visibilities_path.name}", f"/data/{output_prefix.name}",
+        data_dir,
+        "/scripts/process_visibilities.sh",
+        f"/data/{visibilities_path.name}",
+        f"/data/{output_prefix.name}",
         action="Processing",
     )

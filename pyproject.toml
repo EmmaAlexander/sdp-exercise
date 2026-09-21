@@ -12,6 +12,7 @@ dependencies = []
 dev = [
     "pytest>=8.0",
     "pytest-mock (>=3.15.1,<4.0.0)",
+    "ruff (>=0.16.8,<0.17.0)",
 ]
 
 [tool.poetry]
@@ -22,3 +23,10 @@ packages = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

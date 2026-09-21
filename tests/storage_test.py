@@ -5,11 +5,14 @@ import pytest
 from sdp_control.storage import get_directory_size, storage_available
 
 
-@pytest.mark.parametrize("current_size_bytes,threshold_bytes,expected", [
-    (100, 200, True),
-    (200, 200, False),
-    (250, 200, False),
-])
+@pytest.mark.parametrize(
+    "current_size_bytes,threshold_bytes,expected",
+    [
+        (100, 200, True),
+        (200, 200, False),
+        (250, 200, False),
+    ],
+)
 def test_storage_available(current_size_bytes, threshold_bytes, expected):
     assert storage_available(current_size_bytes, threshold_bytes) is expected
 

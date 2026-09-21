@@ -8,10 +8,6 @@ the .env file. Falls back to sensible defaults if unset.
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 DATA_DIR: Path = Path(os.environ.get("DATA_DIR", "data")).resolve()
 STORAGE_THRESHOLD_BYTES: int = int(os.environ.get("STORAGE_THRESHOLD_BYTES", 5 * 1024**3))
 MAX_CONCURRENT_PROCESSING: int = int(os.environ.get("MAX_CONCURRENT_PROCESSING", 3))

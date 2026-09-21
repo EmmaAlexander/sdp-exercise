@@ -26,4 +26,4 @@ def human_review(obs: Observation) -> str:
         if raw in DECISION_ALIASES:
             return DECISION_ALIASES[raw]
 
-        log.warning(f"Unrecognised input '{raw}'. Please enter 'continue/c' or 'reprocess/r'")
+        log.warning(f"Unrecognised input '{raw}'. Please enter 'continue'/'c' or 'reprocess'/'r'")

@@ -1,73 +1,124 @@
 """Tests processing in controller.py"""
 
-import queue
-from pathlib import Path 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from sdp_control import controller
 from sdp_control.models import Observation, ObservationState
 
-def test_process_and_queue():
-	obs= Observation(visibility_path=Path("data/abc123.ms"))
-	executor=Mock()
 
-	with patch("sdp_control.controller.run_processing") as mock_run_processing, \
-		patch("sdp_control.controller.review_queue",queue.Queue()) as mock_queue:
+def make_observation(**overrides) -> Observation:
+    """Build an Observation with sensible test defaults, overridable per test."""
+    defaults = dict(
+        visibility_path=Path("data/abc123.ms"),
+        image_path=None,
+        state=ObservationState.PROCESSING,
+    )
+    defaults.update(overrides)
+    return Observation(**defaults)
 
-		controller.process_and_queue(obs,executor)
 
-		mock_run_processing.assert_called_once()
-		assert obs.state == ObservationState.AWAITING_REVIEW
-		assert obs.image_path == controller.DATA_DIR / f"{obs.obs_id}_image"
+def test_process_transitions_and_queues():
+    obs = make_observation()
+    state = controller.CampaignState()
 
-		queued_obs = mock_queue.get_nowait()
-		assert queued_obs is obs
+    with patch("sdp_control.controller.run_processing") as mock_run:
+        controller.process_and_queue(obs, state)
 
-def test_reviewer_loop_continue_deletes_and_marks_done():
-	obs = Observation(
-		visibility_path=Path("data/abc123.ms"),
-		image_path=Path("data/abc123_image"),
-		state=ObservationState.AWAITING_REVIEW
-	)
-	test_queue = queue.Queue()
-	test_queue.put(obs)
-	test_queue.put(None) # sentinal to stop the loop
+    mock_run.assert_called_once()
+    assert obs.state == ObservationState.AWAITING_REVIEW
+    assert obs.image_path is not None
+    assert state.review_queue.get_nowait() is obs
 
-	executor = Mock()
 
-	with patch("sdp_control.controller.review_queue", test_queue), \
-		patch("sdp_control.controller.human_review", return_value="continue"), \
-		patch("sdp_control.controller.shutil.rmtree") as mock_rmtree, \
-		patch("sdp_control.controller._mark_done") as mock_mark_done, \
-		patch.object(Path, "exists", return_value=True):
+def test_submit_calls_executor():
+    obs = make_observation()
+    state = controller.CampaignState()
+    executor = Mock()
 
-		controller.reviewer_loop(executor)
+    controller.submit_processing(obs, executor, state)
 
-	mock_rmtree.assert_called_once_with(obs.visibility_path)
-	mock_mark_done.assert_called_once()
-	assert obs.state == ObservationState.DONE 
-	executor.submit.assert_not_called()
+    executor.submit.assert_called_once_with(controller.process_and_queue, obs, state)
 
-def test_reviewer_loop_reprocess_resubmits_without_deleting():
-	obs = Observation(
-		visibility_path=Path("data/abc123.ms"),
-		image_path=Path("data/abc123_image"),
-		state=ObservationState.AWAITING_REVIEW,
-	)
-	test_queue = queue.Queue()
-	test_queue.put(obs)
-	test_queue.put(None)
 
-	executor = Mock()
+def test_submit_marks_complete_on_failure():
+    obs = make_observation()
+    state = controller.CampaignState()
+    state.mark_pending(obs)
+    executor = Mock()
+    future = Mock()
+    executor.submit.return_value = future
 
-	with patch("sdp_control.controller.review_queue", test_queue), \
-		patch("sdp_control.controller.human_review", return_value="reprocess"), \
-		patch("sdp_control.controller.shutil.rmtree") as mock_rmtree, \
-		patch("sdp_control.controller._mark_done") as mock_mark_done:
+    controller.submit_processing(obs, executor, state)
+    on_done = future.add_done_callback.call_args[0][0]
+    future.result.side_effect = RuntimeError("docker exploded")
+    on_done(future)
 
-		controller.reviewer_loop(executor)
+    assert obs.obs_id not in state.pending
 
-	mock_rmtree.assert_not_called()
-	mock_mark_done.assert_not_called()
-	assert obs.state == ObservationState.PROCESSING
-	executor.submit.assert_called_once_with(controller.process_and_queue, obs, executor)
+
+def test_submit_keeps_pending_on_success():
+    obs = make_observation()
+    state = controller.CampaignState()
+    state.mark_pending(obs)
+    executor = Mock()
+    future = Mock()
+    executor.submit.return_value = future
+
+    controller.submit_processing(obs, executor, state)
+    on_done = future.add_done_callback.call_args[0][0]
+    future.result.return_value = None
+    on_done(future)
+
+    assert obs.obs_id in state.pending
+
+
+def test_review_continue_deletes_and_completes():
+    obs = make_observation(image_path=Path("data/abc123_image"), state=ObservationState.AWAITING_REVIEW)
+    state = controller.CampaignState()
+    state.mark_pending(obs)
+    state.review_queue.put(obs)
+    state.review_queue.put(None)
+    executor = Mock()
+
+    with patch("sdp_control.controller.human_review", return_value="continue"), \
+         patch("sdp_control.controller.shutil.rmtree") as mock_rmtree, \
+         patch.object(Path, "exists", return_value=True):
+        controller.reviewer_loop(executor, state)
+
+    mock_rmtree.assert_called_once_with(obs.visibility_path)
+    assert obs.state == ObservationState.DONE
+    assert obs.obs_id not in state.pending
+    executor.submit.assert_not_called()
+
+
+def test_review_reprocess_resubmits():
+    obs = make_observation(image_path=Path("data/abc123_image"), state=ObservationState.AWAITING_REVIEW)
+    state = controller.CampaignState()
+    state.mark_pending(obs)
+    state.review_queue.put(obs)
+    state.review_queue.put(None)
+    executor = Mock()
+
+    with patch("sdp_control.controller.human_review", return_value="reprocess"), \
+         patch("sdp_control.controller.shutil.rmtree") as mock_rmtree:
+        controller.reviewer_loop(executor, state)
+
+    mock_rmtree.assert_not_called()
+    assert obs.state == ObservationState.PROCESSING
+    assert obs.obs_id in state.pending
+    executor.submit.assert_called_once_with(controller.process_and_queue, obs, state)
+
+
+def test_shutdown_completes_when_nothing_pending():
+    state = controller.CampaignState()
+    executor = Mock()
+    reviewer_thread = Mock()
+
+    controller.shutdown(executor, reviewer_thread, state)
+
+    assert state.observing_finished.is_set()
+    assert state.campaign_complete.is_set()
+    executor.shutdown.assert_called_once_with(wait=True)
+    reviewer_thread.join.assert_called_once()
+    assert state.review_queue.get_nowait() is None

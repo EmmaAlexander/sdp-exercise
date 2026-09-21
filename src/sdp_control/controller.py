@@ -1,114 +1,145 @@
 """Overall controll for observing, proessing, and review"""
 
-import logging 
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path 
-import shutil
-import queue 
-import threading
+from __future__ import annotations
 
+import logging
+import queue
+import shutil
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from sdp_control.data_review import human_review
 from sdp_control.models import Observation, ObservationState
 from sdp_control.runner import run_observation, run_processing
-from sdp_control.storage import storage_available, get_directory_size
-from sdp_control.data_review import human_review
+from sdp_control.storage import get_directory_size, storage_available
 
 log = logging.getLogger(__name__)
 
 DATA_DIR = Path("data").resolve()
-STORAGE_THRESHOLD_BYTES = 5 * 1024**3 # 5GB
-MAX_CONCURRENT_PROCESSING = 1
-
-review_queue: queue.Queue = queue.Queue()
-
-_pending_lock=threading.Lock()
-_pending_count=0
-_observing_finished = threading.Event()
-_campaign_complete = threading.Event()
+STORAGE_THRESHOLD_BYTES = 5 * 1024**3  # 5GB
+MAX_CONCURRENT_PROCESSING = 2
 
 
-def _mark_pending() -> None:
-	"""Record that one more observation is processing or in review"""
-	global _pending_count
-	with _pending_lock:
-		_pending_count +=1
+@dataclass
+class CampaignState:
+	"""Shared coordination state for one running campaign."""
 
-def _mark_done() -> None:
-	"""Record that an obsevation has reached DONE and check if campaign is finished"""
-	global _pending_count 
-	with _pending_lock:
-		_pending_count -= 1
-		remaining = _pending_count
+	review_queue: queue.Queue[Observation | None] = field(default_factory=queue.Queue)
+	pending: set[str] = field(default_factory=set)
+	pending_lock: threading.Lock = field(default_factory=threading.Lock)
+	observing_finished: threading.Event = field(default_factory=threading.Event)
+	campaign_complete: threading.Event = field(default_factory=threading.Event)
 
-	if remaining == 0 and _observing_finished.is_set():
-		_campaign_complete.set()
+	def mark_pending(self, obs: Observation) -> None:
+		"""Record that an observation is now in flight (processing or review)."""
+		with self.pending_lock:
+			self.pending.add(obs.obs_id)
 
-def process_and_queue(obs: Observation, executor: ThreadPoolExecutor) -> None:
-	"""Run processing for an observation then queue for qa review"""
+	def mark_complete(self, obs: Observation) -> None:
+		"""Record that an observation has finished, and check if the campaign is done."""
+		with self.pending_lock:
+			self.pending.discard(obs.obs_id)
+			if not self.pending and self.observing_finished.is_set():
+				self.campaign_complete.set()
+
+
+def process_and_queue(obs: Observation, state: CampaignState) -> None:
+	"""Process an observation, then queue it for human review."""
 	image_prefix = DATA_DIR / f"{obs.obs_id}_image"
 	run_processing(DATA_DIR, obs.visibility_path, image_prefix)
 	obs.image_path = image_prefix
 	obs.transition_state(ObservationState.AWAITING_REVIEW)
-	review_queue.put(obs)
+	state.review_queue.put(obs)
+	log.info(f"Observation {obs.obs_id} is ready for review")
 
-def reviewer_loop(executor: ThreadPoolExecutor) -> None:
-	"""Review observations one by one from the queue"""
+
+def submit_processing(obs: Observation, executor: ThreadPoolExecutor, state: CampaignState) -> None:
+	"""Submit an observation to the processing pool, handling failures via callback."""
+
+	def on_done(future: Future[None]) -> None:
+		try:
+			future.result()
+		except Exception:
+			log.exception(f"Processing failed for observation {obs.obs_id}")
+			state.mark_complete(obs)
+
+	future = executor.submit(process_and_queue, obs, state)
+	future.add_done_callback(on_done)
+
+
+def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignState) -> None:
+	"""Review processed observations one at a time until the queue is closed."""
 	while True:
-		obs = review_queue.get()
+		obs = state.review_queue.get()
 		if obs is None:
-			break
+			return
 
 		decision = human_review(obs)
+
 		if decision == "continue":
 			if obs.visibility_path and obs.visibility_path.exists():
 				shutil.rmtree(obs.visibility_path)
 			obs.transition_state(ObservationState.DONE)
-			_mark_done()
-		else:
+			state.mark_complete(obs)
+			log.info(f"Observation {obs.obs_id} completed")
+
+		else:  # "reprocess"
 			obs.transition_state(ObservationState.PROCESSING)
-			executor.submit(process_and_queue, obs, executor)
+			submit_processing(obs, executor, state)
+
+
+def shutdown(executor: ThreadPoolExecutor, reviewer_thread: threading.Thread, state: CampaignState) -> None:
+	"""Signal that observing has finished, and wait for everything else to drain."""
+	state.observing_finished.set()
+
+	with state.pending_lock:
+		if not state.pending:
+			state.campaign_complete.set()
+
+	log.info("Observing finished; waiting for processing and review to finish.")
+	state.campaign_complete.wait()
+
+	state.review_queue.put(None)
+	reviewer_thread.join()
+	executor.shutdown(wait=True)
+	log.info("Campaign complete.")
+
 
 def main() -> None:
-
-	"""Observe continuously while storage allows, process and review in background"""
+	"""Run observations until the storage threshold is reached."""
 	DATA_DIR.mkdir(exist_ok=True)
 
-	executor= ThreadPoolExecutor(max_workers=MAX_CONCURRENT_PROCESSING)
-	reviewer_thread = threading.Thread(target=reviewer_loop, args = (executor,))
+	state = CampaignState()
+	executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_PROCESSING)
+	reviewer_thread = threading.Thread(target=reviewer_loop, args=(executor, state))
 	reviewer_thread.start()
 
-	while True:
-		current_size= get_directory_size(DATA_DIR)
-		if not storage_available(current_size,STORAGE_THRESHOLD_BYTES):
-			log.info("Storage threashold reached. Stopping new observations.")
-			break
+	try:
+		while True:
+			current_size = get_directory_size(DATA_DIR)
+			if not storage_available(current_size, STORAGE_THRESHOLD_BYTES):
+				log.info("Storage threshold reached; stopping new observations.")
+				break
 
-		obs = Observation()
-		obs.transition_state(ObservationState.OBSERVING)
-		vis_path= DATA_DIR / f"{obs.obs_id}.ms"
-		run_observation(DATA_DIR, vis_path)
-		obs.visibility_path = vis_path
-		obs.transition_state(ObservationState.PROCESSING)
+			obs = Observation()
+			obs.transition_state(ObservationState.OBSERVING)
+			visibility_path = DATA_DIR / f"{obs.obs_id}.ms"
+			run_observation(DATA_DIR, visibility_path)
+			obs.visibility_path = visibility_path
+			obs.transition_state(ObservationState.PROCESSING)
 
-		_mark_pending()
-		executor.submit(process_and_queue, obs, executor)
-
-	_observing_finished.set()
-	if _pending_count==0:
-		_campaign_complete.set()
-
-	log.info("Waiting for remaining processing and review to finish")
-
-	_campaign_complete.wait()
-
-	executor.shutdown(wait=True)
-	review_queue.put(None)
-	reviewer_thread.join()
-
-	log.info("Everything complete")
-
-
+			state.mark_pending(obs)
+			submit_processing(obs, executor, state)
+	finally:
+		shutdown(executor, reviewer_thread, state)
 
 
 if __name__ == "__main__":
-	logging.basicConfig(level=logging.INFO)
+	logging.basicConfig(
+		filename="campaign.log",
+		level=logging.INFO,
+		format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+	)
 	main()

@@ -173,3 +173,30 @@ def test_review_cleanup_failure_marks_observation_failed():
 
     assert obs.state == ObservationState.FAILED
     assert obs.obs_id not in state.pending
+
+
+
+def test_main_stops_when_storage_threshold_reached():
+    with patch(
+        "sdp_control.controller.get_directory_size",
+        return_value=100,
+    ), patch(
+        "sdp_control.controller.storage_available",
+        return_value=False,
+    ), patch(
+        "sdp_control.controller.run_observation",
+    ) as mock_run_observation, patch(
+        "sdp_control.controller.ThreadPoolExecutor",
+    ) as mock_executor_class, patch(
+        "sdp_control.controller.threading.Thread",
+    ) as mock_thread_class:
+
+        mock_executor = mock_executor_class.return_value
+        mock_reviewer_thread = mock_thread_class.return_value
+
+        controller.main()
+
+    mock_run_observation.assert_not_called()
+    mock_executor.shutdown.assert_called_once_with(wait=True)
+    mock_reviewer_thread.start.assert_called_once()
+    mock_reviewer_thread.join.assert_called_once()

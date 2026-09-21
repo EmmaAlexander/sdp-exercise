@@ -20,6 +20,27 @@ class ObservationState(Enum):
     DONE = auto()
     FAILED = auto()
 
+VALID_TRANSITIONS = {
+    ObservationState.PENDING: {
+        ObservationState.OBSERVING,
+    },
+    ObservationState.OBSERVING: {
+        ObservationState.PROCESSING,
+        ObservationState.FAILED,
+    },
+    ObservationState.PROCESSING: {
+        ObservationState.AWAITING_REVIEW,
+        ObservationState.FAILED,
+    },
+    ObservationState.AWAITING_REVIEW: {
+        ObservationState.PROCESSING,
+        ObservationState.DONE,
+        ObservationState.FAILED,
+    },
+    ObservationState.DONE: set(),
+    ObservationState.FAILED: set(),
+}
+
 
 @dataclass
 class Observation:
@@ -31,6 +52,17 @@ class Observation:
     image_path: Path | None = None
 
     def transition_state(self, new_state: ObservationState) -> None:
-        """Move observation to a new state and record the change."""
-        log.info(f"Observation {self.obs_id}: {self.state.name} -> {new_state.name}")
+        """Move the observation to a valid next state."""
+        if new_state not in VALID_TRANSITIONS[self.state]:
+            raise ValueError(
+                f"Invalid state transition: "
+                f"{self.state.name} -> {new_state.name}"
+            )
+
+        log.info(
+            "Observation %s: %s -> %s",
+            self.obs_id,
+            self.state.name,
+            new_state.name,
+        )
         self.state = new_state

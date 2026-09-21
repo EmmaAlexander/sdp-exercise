@@ -1,7 +1,6 @@
 """Tests data_review for review prompts"""
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -22,15 +21,21 @@ def make_observation() -> Observation:
     ("Continue", "continue"),
     ("REPROCESS", "reprocess"),
 ])
-def test_human_review_accepts_valid_input(user_input, expected):
+
+def test_human_review_accepts_valid_input(user_input, expected, mocker):
     obs = make_observation()
-    with patch("builtins.input", return_value=user_input):
-        assert human_review(obs) == expected
 
+    mocker.patch("builtins.input", return_value=user_input)
 
-def test_human_review_reprompts_on_invalid_input_then_accepts():
+    assert human_review(obs) == expected
+
+def test_human_review_reprompts_on_invalid_input_then_accepts(mocker):
     obs = make_observation()
-    with patch("builtins.input", side_effect=["banana", "r"]) as mock_input:
-        assert human_review(obs) == "reprocess"
 
+    mock_input = mocker.patch(
+        "builtins.input",
+        side_effect=["banana", "r"],
+    )
+
+    assert human_review(obs) == "reprocess"
     assert mock_input.call_count == 2

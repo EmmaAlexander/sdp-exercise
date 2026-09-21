@@ -15,12 +15,10 @@ from sdp_control.models import Observation, ObservationState
 from sdp_control.runner import run_observation, run_processing
 from sdp_control.storage import get_directory_size, storage_available
 
+from sdp_control.config import DATA_DIR, MAX_CONCURRENT_PROCESSING, STORAGE_THRESHOLD_BYTES
+
 log = logging.getLogger(__name__)
 status = logging.getLogger("status")
-
-DATA_DIR = Path("data").resolve()
-STORAGE_THRESHOLD_BYTES = 2 * 1024**3  # 1GB
-MAX_CONCURRENT_PROCESSING = 2
 
 
 @dataclass

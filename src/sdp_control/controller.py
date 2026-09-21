@@ -22,7 +22,7 @@ status = logging.getLogger("status")
 
 
 @dataclass
-class CampaignState:
+class CampaignCoordinator:
     """Shared coordination state for one running campaign."""
 
     review_queue: queue.Queue[Observation | None] = field(default_factory=queue.Queue)
@@ -44,7 +44,7 @@ class CampaignState:
                 self.campaign_complete.set()
 
 
-def process_and_queue(obs: Observation, state: CampaignState) -> None:
+def process_and_queue(obs: Observation, state: CampaignCoordinator) -> None:
     """Process an observation, then queue it for human review."""
     if obs.visibility_path is None:
         raise ValueError(
@@ -58,7 +58,7 @@ def process_and_queue(obs: Observation, state: CampaignState) -> None:
     status.info(f"Observation {obs.obs_id[:8]} ready for review")
 
 
-def submit_processing(obs: Observation, executor: ThreadPoolExecutor, state: CampaignState) -> None:
+def submit_processing(obs: Observation, executor: ThreadPoolExecutor, state: CampaignCoordinator) -> None:
     """Submit an observation to the processing pool, handling failures via callback."""
 
     def on_done(future: Future[None]) -> None:
@@ -73,7 +73,7 @@ def submit_processing(obs: Observation, executor: ThreadPoolExecutor, state: Cam
     future.add_done_callback(on_done)
 
 
-def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignState) -> None:
+def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignCoordinator) -> None:
     """Review processed observations one at a time until the queue is closed."""
     while True:
         obs = state.review_queue.get()
@@ -108,7 +108,7 @@ def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignState) -> None:
 
 
 
-def shutdown(executor: ThreadPoolExecutor, reviewer_thread: threading.Thread, state: CampaignState) -> None:
+def shutdown(executor: ThreadPoolExecutor, reviewer_thread: threading.Thread, state: CampaignCoordinator) -> None:
     """Signal that observing has finished, and wait for everything else to drain."""
     state.observing_finished.set()
 
@@ -130,7 +130,7 @@ def main() -> None:
     """Run observations until the storage threshold is reached."""
     DATA_DIR.mkdir(exist_ok=True)
 
-    state = CampaignState()
+    state = CampaignCoordinator()
     executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_PROCESSING)
     reviewer_thread = threading.Thread(target=reviewer_loop, args=(executor, state))
     reviewer_thread.start()

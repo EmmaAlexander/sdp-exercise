@@ -19,7 +19,7 @@ def make_observation(**overrides) -> Observation:
 
 def test_process_transitions_and_queues(mocker):
     obs = make_observation()
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
 
     mock_run = mocker.patch("sdp_control.controller.run_processing")
 
@@ -33,7 +33,7 @@ def test_process_transitions_and_queues(mocker):
 
 def test_submit_calls_executor(mocker):
     obs = make_observation()
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
     executor = mocker.Mock()
 
     controller.submit_processing(obs, executor, state)
@@ -43,7 +43,7 @@ def test_submit_calls_executor(mocker):
 
 def test_submit_marks_failed_on_processing_failure(mocker):
     obs = make_observation()
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
     state.mark_pending(obs)
     executor = mocker.Mock()
     future = mocker.Mock()
@@ -61,7 +61,7 @@ def test_submit_marks_failed_on_processing_failure(mocker):
 
 def test_submit_keeps_pending_on_success(mocker):
     obs = make_observation()
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
     state.mark_pending(obs)
     executor = mocker.Mock()
     future = mocker.Mock()
@@ -80,7 +80,7 @@ def test_review_continue_deletes_and_completes(mocker):
         image_path=Path("data/abc123_image"),
         state=ObservationState.AWAITING_REVIEW,
     )
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
     state.mark_pending(obs)
     state.review_queue.put(obs)
     state.review_queue.put(None)
@@ -112,7 +112,7 @@ def test_review_reprocess_resubmits(mocker):
         image_path=Path("data/abc123_image"),
         state=ObservationState.AWAITING_REVIEW,
     )
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
     state.mark_pending(obs)
     state.review_queue.put(obs)
     state.review_queue.put(None)
@@ -139,7 +139,7 @@ def test_review_reprocess_resubmits(mocker):
 
 
 def test_shutdown_completes_when_nothing_pending(mocker):
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
     executor = mocker.Mock()
     reviewer_thread = mocker.Mock()
 
@@ -156,7 +156,7 @@ def test_review_failure_marks_observation_failed(mocker):
         image_path=Path("data/abc123_image"),
         state=ObservationState.AWAITING_REVIEW,
     )
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
     state.mark_pending(obs)
     state.review_queue.put(obs)
     state.review_queue.put(None)
@@ -178,7 +178,7 @@ def test_review_cleanup_failure_marks_observation_failed(mocker):
         image_path=Path("data/abc123_image"),
         state=ObservationState.AWAITING_REVIEW,
     )
-    state = controller.CampaignState()
+    state = controller.CampaignCoordinator()
     state.mark_pending(obs)
     state.review_queue.put(obs)
     state.review_queue.put(None)
@@ -249,3 +249,50 @@ def test_main_continues_after_observation_failure(mocker):
     mocker.patch("sdp_control.controller.threading.Thread")
 
     controller.main()  # should not raise
+
+def test_campaign_complete_when_pending_empty_and_observing_finished(mocker):
+    coordinator = controller.CampaignCoordinator()
+    obs = make_observation()
+
+    coordinator.mark_pending(obs)
+    coordinator.observing_finished.set()
+    coordinator.mark_complete(obs)
+
+    assert coordinator.campaign_complete.is_set()
+
+
+def test_campaign_not_complete_while_pending_remains(mocker):
+    coordinator = controller.CampaignCoordinator()
+    obs1, obs2 = make_observation(), make_observation()
+
+    coordinator.mark_pending(obs1)
+    coordinator.mark_pending(obs2)
+    coordinator.observing_finished.set()
+    coordinator.mark_complete(obs1)
+
+    assert not coordinator.campaign_complete.is_set()
+
+
+def test_campaign_not_complete_if_observing_not_finished(mocker):
+    coordinator = controller.CampaignCoordinator()
+    obs = make_observation()
+
+    coordinator.mark_pending(obs)
+    coordinator.mark_complete(obs)
+    # observing_finished was never set
+
+    assert not coordinator.campaign_complete.is_set()
+
+
+def test_campaign_completes_on_last_pending_observation(mocker):
+    coordinator = controller.CampaignCoordinator()
+    obs1, obs2 = make_observation(), make_observation()
+
+    coordinator.mark_pending(obs1)
+    coordinator.mark_pending(obs2)
+    coordinator.observing_finished.set()
+    coordinator.mark_complete(obs1)
+    assert not coordinator.campaign_complete.is_set()
+
+    coordinator.mark_complete(obs2)
+    assert coordinator.campaign_complete.is_set()

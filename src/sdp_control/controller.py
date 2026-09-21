@@ -1,4 +1,4 @@
-"""Overall controll for observing, proessing, and review"""
+"""Overall control for observing, proessing, and review"""
 
 from __future__ import annotations
 

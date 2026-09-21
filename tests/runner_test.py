@@ -40,12 +40,6 @@ def test_run_processing(mocker):
     assert args[-2] == "/data/out.ms"
     assert args[-1] == "/data/out"
 
-    args = mock_run.call_args[0][0]
-
-    assert args[0] == "docker"
-    assert args[-3] == "/scripts/process_visibilities.sh"
-    assert args[-2] == "/data/out.ms"
-    assert args[-1] == "/data/out"
 
 
 def test_run_observation_raises_on_failure(mocker):

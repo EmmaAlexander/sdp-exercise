@@ -234,3 +234,18 @@ def test_main_stops_when_storage_threshold_reached(mocker):
     mock_executor.shutdown.assert_called_once_with(wait=True)
     mock_reviewer_thread.start.assert_called_once()
     mock_reviewer_thread.join.assert_called_once()
+
+def test_main_continues_after_observation_failure(mocker):
+    mocker.patch("sdp_control.controller.get_directory_size", return_value=0)
+    mocker.patch(
+        "sdp_control.controller.storage_available",
+        side_effect=[True, False],
+    )
+    mocker.patch(
+        "sdp_control.controller.run_observation",
+        side_effect=RuntimeError("docker failed"),
+    )
+    mocker.patch("sdp_control.controller.ThreadPoolExecutor")
+    mocker.patch("sdp_control.controller.threading.Thread")
+
+    controller.main()  # should not raise

@@ -156,13 +156,22 @@ def main() -> None:
             obs.transition_state(ObservationState.OBSERVING)
             status.info(f"Observing {obs.obs_id[:8]}...")
             visibility_path = DATA_DIR / f"{obs.obs_id}.ms"
-            run_observation(DATA_DIR, visibility_path)
+
+            try:
+                run_observation(DATA_DIR, visibility_path)
+            except Exception:
+                log.exception(f"Observation failed for {obs.obs_id}")
+                obs.transition_state(ObservationState.FAILED)
+                continue
+
             obs.visibility_path = visibility_path
             obs.transition_state(ObservationState.PROCESSING)
 
             state.mark_pending(obs)
             submit_processing(obs, executor, state)
             observations_started += 1
+
+
     finally:
         shutdown(executor, reviewer_thread, state)
 

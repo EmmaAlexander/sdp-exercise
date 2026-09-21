@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 status = logging.getLogger("status")
 
 DATA_DIR = Path("data").resolve()
-STORAGE_THRESHOLD_BYTES = 5 * 1024**3  # 5GB
+STORAGE_THRESHOLD_BYTES = 2 * 1024**3  # 1GB
 MAX_CONCURRENT_PROCESSING = 2
 
 
@@ -118,11 +118,21 @@ def main() -> None:
     reviewer_thread = threading.Thread(target=reviewer_loop, args=(executor, state))
     reviewer_thread.start()
 
+    observations_started = 0
+
     try:
         while True:
             current_size = get_directory_size(DATA_DIR)
             if not storage_available(current_size, STORAGE_THRESHOLD_BYTES):
-                log.info("Storage threshold reached; stopping new observations.")
+                if observations_started == 0:
+                    status.info(
+                        f"No observations were run: existing data ({current_size} bytes) "
+                        f"already meets or exceeds the storage threshold "
+                        f"({STORAGE_THRESHOLD_BYTES} bytes)."
+                    )
+
+                else:
+                    log.info("Storage threshold reached; stopping new observations.")
                 break
 
             obs = Observation()
@@ -135,6 +145,7 @@ def main() -> None:
 
             state.mark_pending(obs)
             submit_processing(obs, executor, state)
+            observations_started += 1
     finally:
         shutdown(executor, reviewer_thread, state)
 

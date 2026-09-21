@@ -72,21 +72,35 @@ def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignState) -> None:
     """Review processed observations one at a time until the queue is closed."""
     while True:
         obs = state.review_queue.get()
+
         if obs is None:
             return
 
-        decision = human_review(obs)
+        try:
+            decision = human_review(obs)
 
-        if decision == "continue":
-            if obs.visibility_path and obs.visibility_path.exists():
-                shutil.rmtree(obs.visibility_path)
-            obs.transition_state(ObservationState.DONE)
+            if decision == "continue":
+                if obs.visibility_path and obs.visibility_path.exists():
+                    shutil.rmtree(obs.visibility_path)
+
+                obs.transition_state(ObservationState.DONE)
+                state.mark_complete(obs)
+                status.info(
+                    f"Observation {obs.obs_id[:8]} accepted, "
+                    "visibility data removed"
+                )
+            else:  # "reprocess"
+                obs.transition_state(ObservationState.PROCESSING)
+                submit_processing(obs, executor, state)
+
+        except Exception:
+            log.exception(
+                "Review failed for observation %s",
+                obs.obs_id,
+            )
+            obs.transition_state(ObservationState.FAILED)
             state.mark_complete(obs)
-            status.info(f"{obs.obs_id[:8]} accepted, visibility data removed")
 
-        else:  # "reprocess"
-            obs.transition_state(ObservationState.PROCESSING)
-            submit_processing(obs, executor, state)
 
 
 def shutdown(executor: ThreadPoolExecutor, reviewer_thread: threading.Thread, state: CampaignState) -> None:

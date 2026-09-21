@@ -122,3 +122,52 @@ def test_shutdown_completes_when_nothing_pending():
     executor.shutdown.assert_called_once_with(wait=True)
     reviewer_thread.join.assert_called_once()
     assert state.review_queue.get_nowait() is None
+
+def test_review_failure_marks_observation_failed():
+    obs = make_observation(
+        image_path=Path("data/abc123_image"),
+        state=ObservationState.AWAITING_REVIEW,
+    )
+    state = controller.CampaignState()
+    state.mark_pending(obs)
+    state.review_queue.put(obs)
+    state.review_queue.put(None)
+
+    executor = Mock()
+
+    with patch(
+        "sdp_control.controller.human_review",
+        side_effect=RuntimeError("review failed"),
+    ):
+        controller.reviewer_loop(executor, state)
+
+    assert obs.state == ObservationState.FAILED
+    assert obs.obs_id not in state.pending
+
+def test_review_cleanup_failure_marks_observation_failed():
+    obs = make_observation(
+        image_path=Path("data/abc123_image"),
+        state=ObservationState.AWAITING_REVIEW,
+    )
+    state = controller.CampaignState()
+    state.mark_pending(obs)
+    state.review_queue.put(obs)
+    state.review_queue.put(None)
+
+    executor = Mock()
+
+    with patch(
+        "sdp_control.controller.human_review",
+        return_value="continue",
+    ), patch(
+        "sdp_control.controller.shutil.rmtree",
+        side_effect=OSError("could not remove visibility data"),
+    ), patch.object(
+        Path,
+        "exists",
+        return_value=True,
+    ):
+        controller.reviewer_loop(executor, state)
+
+    assert obs.state == ObservationState.FAILED
+    assert obs.obs_id not in state.pending

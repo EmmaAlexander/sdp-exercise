@@ -1,4 +1,4 @@
-"""Wrappers around the mock observae and process Docker commands."""
+"""Wrappers around the mock observe and process Docker commands."""
 
 import logging
 import subprocess

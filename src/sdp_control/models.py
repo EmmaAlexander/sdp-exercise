@@ -18,6 +18,7 @@ class ObservationState(Enum):
     PROCESSING = auto()
     AWAITING_REVIEW = auto()
     DONE = auto()
+    FAILED = auto()
 
 
 @dataclass

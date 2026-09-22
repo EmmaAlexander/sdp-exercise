@@ -19,14 +19,12 @@ DECISION_ALIASES = {
 def human_review(obs: Observation) -> str:
     """Prompt a human for a quality decision, reprompting on invalid input."""
     while True:
-        raw = (
-            input(
-                f"Review {obs.obs_id} and image: "
-                f"{obs.image_path.name}. Decide to (c)ontinue or (r)eprocess? "
-            )
-            .strip()
-            .lower()
-        )
+        processing_time = obs.stage_durations.get("PROCESSING")
+        timing_info = f"{processing_time:.1f}s" if processing_time is not None else "unknown"
+        raw = input(
+            f"Review {obs.obs_id} and image: {obs.image_path.name}. "
+            f"Processing took {timing_info}. Decide to (c)ontinue or (r)eprocess? "
+        ).strip().lower()
 
         if raw in DECISION_ALIASES:
             return DECISION_ALIASES[raw]

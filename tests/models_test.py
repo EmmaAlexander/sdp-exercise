@@ -35,3 +35,11 @@ def test_terminal_states_cannot_transition(terminal_state):
 
     with pytest.raises(ValueError):
         obs.transition_state(ObservationState.PROCESSING)
+
+def test_transition_records_stage_duration():
+    obs = Observation()
+    obs.transition_state(ObservationState.OBSERVING)
+    obs.transition_state(ObservationState.PROCESSING)
+
+    assert "OBSERVING" in obs.stage_durations
+    assert obs.stage_durations["OBSERVING"] >= 0

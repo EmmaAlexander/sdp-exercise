@@ -70,4 +70,3 @@ class Observation:
 
         self.state = new_state
         self._stage_started_at = datetime.now()
-        self.state = new_state

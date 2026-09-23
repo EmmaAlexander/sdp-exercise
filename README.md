@@ -5,7 +5,7 @@ It continually "observes" while storage allows, processes observations concurren
 
 ## Requirements: 
 - Python 3.10+
-- Docker
+- Docker (daemon must be running — `docker ps` should succeed)
 - Poetry for dependency management
 
 ## Installation 

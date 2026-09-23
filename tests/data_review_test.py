@@ -24,7 +24,7 @@ def make_observation() -> Observation:
         ("REPROCESS", "reprocess"),
     ],
 )
-def test_human_review_accepts_valid_input(user_input, expected, mocker):
+def test_human_review_accepts_valid_input(user_input, expected, mocker) -> None:
     obs = make_observation()
 
     mocker.patch("builtins.input", return_value=user_input)
@@ -32,7 +32,7 @@ def test_human_review_accepts_valid_input(user_input, expected, mocker):
     assert human_review(obs) == expected
 
 
-def test_human_review_reprompts_on_invalid_input_then_accepts(mocker):
+def test_human_review_reprompts_on_invalid_input_then_accepts(mocker) -> None:
     obs = make_observation()
 
     mock_input = mocker.patch(

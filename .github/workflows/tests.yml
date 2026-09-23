@@ -25,3 +25,9 @@ jobs:
 
       - name: Run tests
         run: poetry run pytest -v
+
+      - name: Run mypy
+        run: poetry run mypy
+
+      - name: Run ruff
+        run: poetry run ruff check .

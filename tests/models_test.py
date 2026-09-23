@@ -5,13 +5,13 @@ import pytest
 from sdp_control.models import Observation, ObservationState
 
 
-def test_new_observation_defaults_to_pending():
+def test_new_observation_defaults_to_pending() -> None:
     obs = Observation()
 
     assert obs.state == ObservationState.PENDING
 
 
-def test_transition_state():
+def test_transition_state() -> None:
     obs = Observation(state=ObservationState.PENDING)
 
     obs.transition_state(ObservationState.OBSERVING)
@@ -19,7 +19,7 @@ def test_transition_state():
     assert obs.state == ObservationState.OBSERVING
 
 
-def test_invalid_transition_raises_error():
+def test_invalid_transition_raises_error() -> None:
     obs = Observation(state=ObservationState.PENDING)
 
     with pytest.raises(ValueError, match="PENDING -> DONE"):
@@ -30,13 +30,13 @@ def test_invalid_transition_raises_error():
     "terminal_state",
     [ObservationState.DONE, ObservationState.FAILED],
 )
-def test_terminal_states_cannot_transition(terminal_state):
+def test_terminal_states_cannot_transition(terminal_state) -> None:
     obs = Observation(state=terminal_state)
 
     with pytest.raises(ValueError):
         obs.transition_state(ObservationState.PROCESSING)
 
-def test_transition_records_stage_duration():
+def test_transition_records_stage_duration() -> None:
     obs = Observation()
     obs.transition_state(ObservationState.OBSERVING)
     obs.transition_state(ObservationState.PROCESSING)

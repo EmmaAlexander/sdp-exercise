@@ -18,6 +18,8 @@ DECISION_ALIASES = {
 
 def human_review(obs: Observation) -> str:
     """Prompt a human for a quality decision, reprompting on invalid input."""
+    if obs.image_path is None:
+        raise ValueError(f"Observation {obs.obs_id} has no image to review")
     while True:
         processing_time = obs.stage_durations.get("PROCESSING")
         timing_info = f"{processing_time:.1f}s" if processing_time is not None else "unknown"

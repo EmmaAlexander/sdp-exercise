@@ -1,4 +1,13 @@
-"""Overall control for observing, proessing, and review"""
+"""Coordinate observation acquisition, processing, review and shutdown.
+
+Observations are acquired sequentially, submitted to a bounded thread
+pool for concurrent processing, and passed to a dedicated review queue
+once processing completes.
+
+The campaign stops acquiring observations when the storage threshold is
+reached and completes only after observation acquisition has finished and
+all outstanding observations have reached a terminal state.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +30,18 @@ status = logging.getLogger("status")
 
 @dataclass
 class CampaignCoordinator:
-    """Shared coordination state for one running campaign."""
+    """Track campaign-wide state shared between worker components.
+
+    The coordinator maintains the observations that have not yet reached a
+    terminal state and the queue used to communicate completed processing
+    jobs to the reviewer.
+
+    Access to the pending observation set is protected by a lock because
+    observations may be added or completed by different threads.
+
+    The campaign is considered complete only when observation acquisition
+    has finished and no observations remain pending.
+    """
 
     review_queue: queue.Queue[Observation | None] = field(default_factory=queue.Queue)
     pending: set[str] = field(default_factory=set)
@@ -30,12 +50,29 @@ class CampaignCoordinator:
     campaign_complete: threading.Event = field(default_factory=threading.Event)
 
     def mark_pending(self, obs: Observation) -> None:
-        """Record that an observation is now in flight (processing or review)."""
+        """Register an observation as pending.
+
+        The observation ID is added to the pending set under the coordinator
+        lock.
+
+        :param obs: Observation entering the campaign.
+        """
+
         with self.pending_lock:
             self.pending.add(obs.obs_id)
 
     def mark_complete(self, obs: Observation) -> None:
-        """Record that an observation has finished, and check if the campaign is done."""
+        """Mark an observation as no longer pending.
+
+        Removes the observation from the pending set and checks whether the
+        campaign can now be considered complete.
+
+        The campaign-complete event is set only when observation acquisition has
+        finished and no observations remain pending.
+
+        :param obs: Observation that has reached a terminal state.
+        """
+
         with self.pending_lock:
             self.pending.discard(obs.obs_id)
             if not self.pending and self.observing_finished.is_set():
@@ -43,7 +80,19 @@ class CampaignCoordinator:
 
 
 def process_and_queue(obs: Observation, state: CampaignCoordinator) -> None:
-    """Process an observation, then queue it for human review."""
+    """Process an observation and queue it for human review.
+
+    Runs the processing command for the observation. On successful
+    processing, the observation is transitioned to ``AWAITING_REVIEW`` and
+    added to the review queue.
+
+    Processing failures are handled by the completion callback registered by
+    :meth:`submit_processing`.
+
+    :param obs: Observation to process.
+    :param state: Campaign coordinator shared by processing and review.
+    """
+
     if obs.visibility_path is None:
         raise ValueError(f"Observation {obs.obs_id} has no visibility data to process")
     image_prefix = DATA_DIR / f"{obs.obs_id}_image"
@@ -57,7 +106,17 @@ def process_and_queue(obs: Observation, state: CampaignCoordinator) -> None:
 def submit_processing(
     obs: Observation, executor: ThreadPoolExecutor, state: CampaignCoordinator
 ) -> None:
-    """Submit an observation to the processing pool, handling failures via callback."""
+    """Submit an observation for asynchronous processing.
+
+    The processing job is submitted to the supplied executor and a
+    completion callback is registered on the returned future. The callback
+    observes worker exceptions and ensures failed observations are marked
+    as ``FAILED`` and removed from the pending set.
+
+    :param obs: Observation to process.
+    :param executor: Executor used to run processing jobs.
+    :param state: Campaign coordinator shared by processing and review.
+    """
 
     def on_done(future: Future[None]) -> None:
         try:
@@ -72,7 +131,26 @@ def submit_processing(
 
 
 def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignCoordinator) -> None:
-    """Review processed observations one at a time until the queue is closed."""
+    """Process observations awaiting human review.
+
+    Observations are consumed from the review queue one at a time, ensuring
+    that only one human-review prompt is active at any point.
+
+    A ``None`` value acts as a sentinel indicating that no further reviews
+    will be submitted and causes the reviewer loop to exit.
+
+    An accepted observation is cleaned up and transitioned to ``DONE``.
+    An observation selected for reprocessing is transitioned back to
+    ``PROCESSING`` and resubmitted to the executor.
+
+    Unexpected failures during review or cleanup mark the affected
+    observation as ``FAILED`` so that a single failed review cannot prevent
+    campaign completion.
+
+    :param executor: Executor used when an observation is reprocessed.
+    :param state: Campaign coordinator containing the review queue.
+    """
+
     while True:
         obs = state.review_queue.get()
 
@@ -105,7 +183,19 @@ def reviewer_loop(executor: ThreadPoolExecutor, state: CampaignCoordinator) -> N
 def shutdown(
     executor: ThreadPoolExecutor, reviewer_thread: threading.Thread, state: CampaignCoordinator
 ) -> None:
-    """Signal that observing has finished, and wait for everything else to drain."""
+    """Shut down campaign components after observation acquisition ends.
+
+    Waits for all pending observations to reach terminal states, signals
+    the reviewer that no further reviews will be submitted, waits for the
+    reviewer thread to exit, and then shuts down the processing executor.
+
+    The reviewer is not stopped until all observations have either completed
+    review or reached a terminal failure state.
+
+    :param executor: Executor used for asynchronous processing.
+    :param reviewer_thread: Dedicated thread handling human review.
+    :param state: Campaign coordinator tracking campaign completion.
+    """
     state.observing_finished.set()
 
     with state.pending_lock:
@@ -123,7 +213,17 @@ def shutdown(
 
 
 def main() -> None:
-    """Run observations until the storage threshold is reached."""
+    """Run the SDP observation campaign.
+
+    Observations are acquired sequentially while sufficient storage is
+    available and submitted for asynchronous processing. Processing
+    concurrency is bounded by the configured executor limit.
+
+    When the storage threshold is reached, no further observations are
+    acquired. The function then waits for outstanding processing and review
+    work to finish before shutting down the worker components.
+    """
+
     DATA_DIR.mkdir(exist_ok=True)
 
     state = CampaignCoordinator()

@@ -1,4 +1,8 @@
-"""Core data models for SDP"""
+"""Data models and state management for SDP observations.
+
+Defines the lifecycle states of an observation and enforces valid
+transitions between those states.
+"""
 
 import logging
 from dataclasses import dataclass, field
@@ -20,7 +24,7 @@ class ObservationState(Enum):
     DONE = auto()
     FAILED = auto()
 
-
+# Define valid state transitions for an observation
 VALID_TRANSITIONS = {
     ObservationState.PENDING: {
         ObservationState.OBSERVING,
@@ -45,7 +49,18 @@ VALID_TRANSITIONS = {
 
 @dataclass
 class Observation:
-    """A single observation at any point in the pipeline."""
+    """Represent a single SDP observation and its processing state.
+
+    An observation progresses through a fixed lifecycle from acquisition
+    through processing and human review. State changes should be made via
+    :meth:`transition_state` so that invalid lifecycle transitions are
+    rejected.
+
+    :param obs_id: Unique identifier for the observation.
+    :param visibility_path: Path to the raw visibility data.
+    :param image_path: Path to the processed image, if available.
+    :param state: Current lifecycle state of the observation.
+    """
 
     obs_id: str = field(default_factory=lambda: str(uuid4()))
     state: ObservationState = ObservationState.PENDING
@@ -56,7 +71,15 @@ class Observation:
     _stage_started_at: datetime = field(default_factory=datetime.now, repr=False)
 
     def transition_state(self, new_state: ObservationState) -> None:
-        """Move the observation to a valid next state."""
+        """Transition the observation to a new lifecycle state.
+
+        The requested transition is checked against :data:`VALID_TRANSITIONS`.
+        Invalid transitions raise ``ValueError``.
+
+        :param new_state: State to transition the observation into.
+        :raises ValueError: If the requested transition is not valid.
+        """
+
         if new_state not in VALID_TRANSITIONS[self.state]:
             raise ValueError(f"Invalid state transition: {self.state.name} -> {new_state.name}")
 

@@ -1,4 +1,5 @@
-"""Wrappers around the mock observe and process Docker commands."""
+"""Run the external Docker-based SDP processing commands."""
+
 
 import logging
 import subprocess
@@ -15,7 +16,16 @@ def _run_docker_script(
     *args: str,
     action: str,
 ) -> None:
-    """Run a mock pipeline script in Docker, raising on failure."""
+    """Run an SDP processing script inside the Docker container.
+
+    The command is executed as a subprocess with output captured for
+    diagnostic logging. A non-zero exit status results in
+    ``subprocess.CalledProcessError``.
+
+    :param script: Name of the processing script to execute.
+    :param args: Arguments passed to the processing script.
+    :raises subprocess.CalledProcessError: If the Docker command fails.
+    """
     log.info("%s -> %s", action, args[-1])
 
     result = subprocess.run(
@@ -40,7 +50,14 @@ def _run_docker_script(
 
 
 def run_observation(data_dir: Path, output_path: Path) -> None:
-    """Generate mock visibility data from an observation with Docker."""
+    """Acquire an observation using the SDP Docker environment.
+
+    :param data_dir: Directory used to store observation data.
+    :param visibility_path: Path where the generated visibility data is
+        written.
+    :raises subprocess.CalledProcessError: If observation acquisition fails.
+    """
+
     _run_docker_script(
         data_dir,
         "/scripts/generate_visibilities.sh",
@@ -50,7 +67,14 @@ def run_observation(data_dir: Path, output_path: Path) -> None:
 
 
 def run_processing(data_dir: Path, visibilities_path: Path, output_prefix: Path) -> None:
-    """Image visibility data with Docker."""
+    """Process an observation using the SDP Docker environment.
+
+    :param data_dir: Directory containing the observation data.
+    :param visibility_path: Path to the visibility data to process.
+    :param image_path: Directory where processed image data is written.
+    :raises subprocess.CalledProcessError: If processing fails.
+    """
+
     _run_docker_script(
         data_dir,
         "/scripts/process_visibilities.sh",

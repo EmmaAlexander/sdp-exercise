@@ -1,6 +1,6 @@
 """Any QA tests needing to be done on the data"""
 
-# TODO add in observign flags
+# TODO add in observing flags
 
 import logging
 
@@ -17,7 +17,15 @@ DECISION_ALIASES = {
 
 
 def human_review(obs: Observation) -> str:
-    """Prompt a human for a quality decision, reprompting on invalid input."""
+    """Prompt the user to accept or reprocess an observation.
+
+    The function continues prompting until a valid decision is entered.
+
+    :param obs: Observation whose processed output is being reviewed.
+    :return: ``"continue"`` if the observation is accepted, or
+        ``"reprocess"`` if processing should be repeated.
+    """
+
     if obs.image_path is None:
         raise ValueError(f"Observation {obs.obs_id} has no image to review")
     while True:

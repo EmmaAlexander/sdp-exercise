@@ -53,8 +53,7 @@ def run_observation(data_dir: Path, output_path: Path) -> None:
     """Acquire an observation using the SDP Docker environment.
 
     :param data_dir: Directory used to store observation data.
-    :param visibility_path: Path where the generated visibility data is
-        written.
+    :param output_path: Path where the generated visibility data is written.
     :raises subprocess.CalledProcessError: If observation acquisition fails.
     """
 
@@ -70,8 +69,8 @@ def run_processing(data_dir: Path, visibilities_path: Path, output_prefix: Path)
     """Process an observation using the SDP Docker environment.
 
     :param data_dir: Directory containing the observation data.
-    :param visibility_path: Path to the visibility data to process.
-    :param image_path: Directory where processed image data is written.
+    :param visibilities_path: Path to the visibility data to process.
+    :param output_prefix: Prefix for the processed image output.
     :raises subprocess.CalledProcessError: If processing fails.
     """
 

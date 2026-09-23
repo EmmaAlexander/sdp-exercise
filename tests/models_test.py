@@ -30,7 +30,9 @@ def test_invalid_transition_raises_error() -> None:
     "terminal_state",
     [ObservationState.DONE, ObservationState.FAILED],
 )
-def test_terminal_states_cannot_transition(terminal_state) -> None:
+def test_terminal_states_cannot_transition(
+    terminal_state: ObservationState,
+) -> None:
     obs = Observation(state=terminal_state)
 
     with pytest.raises(ValueError):

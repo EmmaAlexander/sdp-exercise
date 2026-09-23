@@ -4,11 +4,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
 from sdp_control.runner import run_observation, run_processing
 
 
-def test_run_observation(mocker):
+def test_run_observation(mocker: MockerFixture) -> None:
     mock_run = mocker.patch("sdp_control.runner.subprocess.run")
     mock_run.return_value = mocker.MagicMock(returncode=0)
 
@@ -24,7 +25,7 @@ def test_run_observation(mocker):
     assert args[-1] == "/data/out.ms"
 
 
-def test_run_processing(mocker):
+def test_run_processing(mocker: MockerFixture)-> None:
     mock_run = mocker.patch("sdp_control.runner.subprocess.run")
     mock_run.return_value = mocker.MagicMock(returncode=0)
 
@@ -42,7 +43,7 @@ def test_run_processing(mocker):
     assert args[-1] == "/data/out"
 
 
-def test_run_observation_raises_on_failure(mocker):
+def test_run_observation_raises_on_failure(mocker: MockerFixture)-> None:
     mock_run = mocker.patch("sdp_control.runner.subprocess.run")
     mock_run.return_value = mocker.MagicMock(
         returncode=1,

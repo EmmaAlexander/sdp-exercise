@@ -1,11 +1,12 @@
 """Tests processing in controller.py"""
 
 from pathlib import Path
+from typing import Any
+
+from pytest_mock import MockerFixture
 
 from sdp_control import controller
 from sdp_control.models import Observation, ObservationState
-
-from typing import Any
 
 
 def make_observation(**overrides: Any) -> Observation:
@@ -19,7 +20,7 @@ def make_observation(**overrides: Any) -> Observation:
     return Observation(**defaults)
 
 
-def test_process_transitions_and_queues(mocker) -> None:
+def test_process_transitions_and_queues(mocker: MockerFixture) -> None:
     obs = make_observation()
     state = controller.CampaignCoordinator()
 
@@ -33,7 +34,7 @@ def test_process_transitions_and_queues(mocker) -> None:
     assert state.review_queue.get_nowait() is obs
 
 
-def test_submit_calls_executor(mocker) -> None:
+def test_submit_calls_executor(mocker: MockerFixture) -> None:
     obs = make_observation()
     state = controller.CampaignCoordinator()
     executor = mocker.Mock()
@@ -43,7 +44,7 @@ def test_submit_calls_executor(mocker) -> None:
     executor.submit.assert_called_once_with(controller.process_and_queue, obs, state)
 
 
-def test_submit_marks_failed_on_processing_failure(mocker) -> None:
+def test_submit_marks_failed_on_processing_failure(mocker: MockerFixture) -> None:
     obs = make_observation()
     state = controller.CampaignCoordinator()
     state.mark_pending(obs)
@@ -61,7 +62,7 @@ def test_submit_marks_failed_on_processing_failure(mocker) -> None:
     assert obs.obs_id not in state.pending
 
 
-def test_submit_keeps_pending_on_success(mocker) -> None:
+def test_submit_keeps_pending_on_success(mocker: MockerFixture) -> None:
     obs = make_observation()
     state = controller.CampaignCoordinator()
     state.mark_pending(obs)
@@ -77,7 +78,7 @@ def test_submit_keeps_pending_on_success(mocker) -> None:
     assert obs.obs_id in state.pending
 
 
-def test_review_continue_deletes_and_completes(mocker) -> None:
+def test_review_continue_deletes_and_completes(mocker: MockerFixture) -> None:
     obs = make_observation(
         image_path=Path("data/abc123_image"),
         state=ObservationState.AWAITING_REVIEW,
@@ -109,7 +110,7 @@ def test_review_continue_deletes_and_completes(mocker) -> None:
     executor.submit.assert_not_called()
 
 
-def test_review_reprocess_resubmits(mocker) -> None:
+def test_review_reprocess_resubmits(mocker: MockerFixture) -> None:
     obs = make_observation(
         image_path=Path("data/abc123_image"),
         state=ObservationState.AWAITING_REVIEW,
@@ -140,7 +141,7 @@ def test_review_reprocess_resubmits(mocker) -> None:
     )
 
 
-def test_shutdown_completes_when_nothing_pending(mocker) -> None:
+def test_shutdown_completes_when_nothing_pending(mocker: MockerFixture) -> None:
     state = controller.CampaignCoordinator()
     executor = mocker.Mock()
     reviewer_thread = mocker.Mock()
@@ -154,7 +155,7 @@ def test_shutdown_completes_when_nothing_pending(mocker) -> None:
     assert state.review_queue.get_nowait() is None
 
 
-def test_review_failure_marks_observation_failed(mocker) -> None:
+def test_review_failure_marks_observation_failed(mocker: MockerFixture) -> None:
     obs = make_observation(
         image_path=Path("data/abc123_image"),
         state=ObservationState.AWAITING_REVIEW,
@@ -177,7 +178,7 @@ def test_review_failure_marks_observation_failed(mocker) -> None:
     assert obs.obs_id not in state.pending
 
 
-def test_review_cleanup_failure_marks_observation_failed(mocker) -> None:
+def test_review_cleanup_failure_marks_observation_failed(mocker: MockerFixture) -> None:
     obs = make_observation(
         image_path=Path("data/abc123_image"),
         state=ObservationState.AWAITING_REVIEW,
@@ -209,7 +210,7 @@ def test_review_cleanup_failure_marks_observation_failed(mocker) -> None:
     assert obs.obs_id not in state.pending
 
 
-def test_main_stops_when_storage_threshold_reached(mocker) -> None:
+def test_main_stops_when_storage_threshold_reached(mocker: MockerFixture) -> None:
     mocker.patch(
         "sdp_control.controller.get_directory_size",
         return_value=100,
@@ -239,7 +240,7 @@ def test_main_stops_when_storage_threshold_reached(mocker) -> None:
     mock_reviewer_thread.join.assert_called_once()
 
 
-def test_main_continues_after_observation_failure(mocker) -> None:
+def test_main_continues_after_observation_failure(mocker: MockerFixture) -> None:
     mocker.patch("sdp_control.controller.get_directory_size", return_value=0)
     mocker.patch(
         "sdp_control.controller.storage_available",
@@ -255,7 +256,7 @@ def test_main_continues_after_observation_failure(mocker) -> None:
     controller.main()  # should not raise
 
 
-def test_campaign_complete_when_pending_empty_and_observing_finished(mocker) -> None:
+def test_campaign_complete_when_pending_empty_and_observing_finished(mocker: MockerFixture) -> None:
     coordinator = controller.CampaignCoordinator()
     obs = make_observation()
 
@@ -266,7 +267,7 @@ def test_campaign_complete_when_pending_empty_and_observing_finished(mocker) -> 
     assert coordinator.campaign_complete.is_set()
 
 
-def test_campaign_not_complete_while_pending_remains(mocker) -> None:
+def test_campaign_not_complete_while_pending_remains(mocker: MockerFixture) -> None:
     coordinator = controller.CampaignCoordinator()
     obs1, obs2 = make_observation(), make_observation()
 
@@ -278,7 +279,7 @@ def test_campaign_not_complete_while_pending_remains(mocker) -> None:
     assert not coordinator.campaign_complete.is_set()
 
 
-def test_campaign_not_complete_if_observing_not_finished(mocker) -> None:
+def test_campaign_not_complete_if_observing_not_finished(mocker: MockerFixture) -> None:
     coordinator = controller.CampaignCoordinator()
     obs = make_observation()
 
@@ -289,7 +290,7 @@ def test_campaign_not_complete_if_observing_not_finished(mocker) -> None:
     assert not coordinator.campaign_complete.is_set()
 
 
-def test_campaign_completes_on_last_pending_observation(mocker) -> None:
+def test_campaign_completes_on_last_pending_observation(mocker: MockerFixture) -> None:
     coordinator = controller.CampaignCoordinator()
     obs1, obs2 = make_observation(), make_observation()
 

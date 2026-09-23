@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
 from sdp_control.data_review import human_review
 from sdp_control.models import Observation
@@ -24,7 +25,11 @@ def make_observation() -> Observation:
         ("REPROCESS", "reprocess"),
     ],
 )
-def test_human_review_accepts_valid_input(user_input, expected, mocker) -> None:
+def test_human_review_accepts_valid_input(
+    user_input: str,
+    expected: str,
+    mocker: MockerFixture,
+) -> None:
     obs = make_observation()
 
     mocker.patch("builtins.input", return_value=user_input)
@@ -32,7 +37,7 @@ def test_human_review_accepts_valid_input(user_input, expected, mocker) -> None:
     assert human_review(obs) == expected
 
 
-def test_human_review_reprompts_on_invalid_input_then_accepts(mocker) -> None:
+def test_human_review_reprompts_on_invalid_input_then_accepts(mocker: MockerFixture) -> None:
     obs = make_observation()
 
     mock_input = mocker.patch(
